@@ -1,0 +1,5 @@
+-std=c++17
+-Weverything
+-Wno-unused-const-variable
+-Wno-unused-macros
+-Wno-c++98-compat-pedantic
