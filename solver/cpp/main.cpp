@@ -23,63 +23,128 @@ static void test();
 
 struct Cell {
     using value_type = uint16_t;
-    using candidates_bitset_type = uint16_t;
+    using candidate_bitset_type = uint16_t;
 
     value_type value;
-    candidates_bitset_type candidates;
+    candidate_bitset_type candidate;
 };
 
+// 空欄マスを表す値
+constexpr Cell::value_type BLANK = 0;
+
+// 区間 [1, N] のビットが 1 になっている値 (0ビット目はゼロ)
+constexpr Cell::candidate_bitset_type BITS_ALL_ENABLED = (1 << (N + 1)) - 1 ^ 1;
+static_assert(__builtin_popcount(BITS_ALL_ENABLED) == N);
+static_assert((BITS_ALL_ENABLED >> 1 & 1) == 1);
+static_assert((BITS_ALL_ENABLED >> 9 & 1) == 1);
+static_assert((BITS_ALL_ENABLED >> 0 & 1) == 0);
 
 struct Board {
     std::array<Cell, N * N> cells;
 
-    inline Cell& at(size_t y, size_t x) {
-        return cells[N * y + x];
-    }
+    inline Cell& at(size_t y, size_t x) { return cells[N * y + x]; }
 
-    inline const Cell& at(size_t y, size_t x) const {
-        return cells[N * y + x];
-    }
+    inline const Cell& at(size_t y, size_t x) const { return cells[N * y + x]; }
 
     void store_candidates() {
         for (size_t i = 0; i < cells.size(); ++i) {
-            cells[i].candidates = calc_candidates(i);
+            cells[i].candidate = calc_candidates(i);
         }
     }
 
-    Cell::candidates_bitset_type calc_candidates(size_t target_index) const {
-        if (cells[target_index].value != 0) {
+    /**
+     * マス i に value を書き込んでから、他の空欄マスの候補集合を更新する。
+     *
+     * 更新とは具体的に、
+     * 書き込んだマスが属する 行・列・3x3区画 のうちの空欄マスについて、
+     * 候補の数値集合から書き込んだ値を取り除くことを指す。
+     */
+    void put_with_overwrite(size_t i, Cell::value_type value) {
+        cells[i].value = value;
+        cells[i].candidate = 0;
+
+        const auto f = [&](size_t k) { cells[k].candidate &= BITS_ALL_ENABLED ^ (1 << value); };
+
+        row_elements_foreach(i, f);
+        col_elements_foreach(i, f);
+        square3x3_elements_foreach(i, f);
+    }
+
+    Board put_with_copy(size_t i, Cell::value_type value) const {
+        auto copy = *this;
+        copy.put_with_overwrite(i, value);
+        return copy;
+    }
+
+    // 未定マスなのに候補が一つもない場合は false を返す (=手詰まり)
+    [[nodiscard]] bool fill_obvious_candidates_and_check_solvability() {
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (cells[i].value != BLANK) continue;
+
+            if (cells[i].candidate == 0) {
+                return false;
+            }
+
+            if (__builtin_popcount(cells[i].candidate) == 1) {
+                const auto value = static_cast<Cell::value_type>(__builtin_ctz(cells[i].candidate));
+                put_with_overwrite(i, value);
+                return fill_obvious_candidates_and_check_solvability();
+            }
+        }
+
+        return true;
+    }
+
+    // returns index
+    // 手詰まりの盤面の状態で呼び出してはならない (多分 assertion faild になる)
+    std::optional<size_t> least_cardinality_candidate_index() const {
+        size_t cardinality_min = std::numeric_limits<size_t>::max();
+        size_t index;
+
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (cells[i].value != BLANK) continue;
+            assert(cells[i].candidate != 0);
+
+            const auto card = static_cast<size_t>(__builtin_popcount(cells[i].candidate));
+            if (card < cardinality_min) {
+                cardinality_min = card;
+                index = i;
+            }
+        }
+
+        if (cardinality_min == std::numeric_limits<size_t>::max()) {
+            return std::nullopt;
+        }
+        return index;
+    }
+
+  private:
+    Cell::candidate_bitset_type calc_candidates(size_t target_index) const {
+        if (cells[target_index].value != BLANK) {
             return 0;
         }
 
-        constexpr Cell::candidates_bitset_type all_bits_enabled = (1 << (N + 1)) - 1 ^ 1;
-        assert(__builtin_popcount(all_bits_enabled) == N);
-        assert((all_bits_enabled >> 1 & 1) == 1);
-        assert((all_bits_enabled >> 9 & 1) == 1);
-        assert((all_bits_enabled >> 0 & 1) == 0);
-        Cell::candidates_bitset_type candidates = all_bits_enabled;
+        Cell::candidate_bitset_type candidate = BITS_ALL_ENABLED;
 
-        const auto f =  [&](size_t i) {
+        const auto f = [&](size_t i) {
             const auto v = cells[i].value;
-            if (v == 0) return;
-            candidates &= all_bits_enabled ^ (1 << v);
+            if (v == BLANK) return;
+            candidate &= BITS_ALL_ENABLED ^ (1 << v);
         };
 
         row_elements_foreach(target_index, f);
         col_elements_foreach(target_index, f);
         square3x3_elements_foreach(target_index, f);
 
-        return candidates;
+        return candidate;
     }
-
 };
 
-// ----------------------------------------------------------------------------------------
 static Board read_board(std::istream&);
 
-static void print_board(const Board& b, std::ostream&);
-// ----------------------------------------------------------------------------------------
+static bool solve(Board& input, Board& output);
 
+static void print_board(const Board& b, std::ostream&);
 
 int main() {
     std::cin.tie(nullptr);
@@ -87,14 +152,18 @@ int main() {
 
     test();
 
-    Board board = read_board(std::cin);
+    Board input_board = read_board(std::cin);
 
-    print_board(board, std::cout);
+    Board answer;
+    const bool solve_succeeded = solve(input_board, answer);
+    assert(solve_succeeded);
+
+    print_board(answer, std::cout);
 
     return 0;
 }
 
-
+// is から空白区切りで盤面を受け取って、各空欄マスについて候補値の集合が計算された状態の board を返す。
 static Board read_board(std::istream& is) {
     Board b;
 
@@ -109,6 +178,39 @@ static Board read_board(std::istream& is) {
     return b;
 }
 
+/**
+ * input に対する解を求めて output に格納する。
+ * 解が求まった場合は true, そうでなければ false を返す。
+ * input は store_candidates() が行われた状態でなければならない。
+ */
+static bool solve(Board& input, Board& output) {
+    const bool solvable = input.fill_obvious_candidates_and_check_solvability();
+    if (not solvable) {
+        return false;
+    }
+
+    // 空欄を埋める対象のマスが無い ==> 全マスが埋まったの完了
+    const auto index_opt = input.least_cardinality_candidate_index();
+    if (not index_opt.has_value()) {
+        output = input;
+        return true;
+    }
+
+    const auto index = *index_opt;
+    const auto candidate = input.cells[index].candidate;
+    for (Cell::value_type v = 1; v <= N; ++v) {
+        if (candidate >> v & 1) {
+            auto next_state = input.put_with_copy(index, v);
+
+            const bool solve_succeeded = solve(next_state, output);
+            if (solve_succeeded) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 static void print_board(const Board& b, std::ostream& os) {
     for (size_t y = 0; y < N; ++y) {
@@ -119,7 +221,6 @@ static void print_board(const Board& b, std::ostream& os) {
 
     return;
 }
-
 
 /**
  * each [row][0], [row1][1], ... , [row][N - 1]
@@ -134,9 +235,8 @@ void row_elements_foreach(const size_t i, IndexConsumerFunc&& indexConsumer) {
     return;
 }
 
-
 /**
- * each [0][col], [1][col], ... , [col][N - 1]
+ * each [0][col], [1][col], ... , [N - 1][col]
  */
 template <class IndexConsumerFunc>
 void col_elements_foreach(const size_t i, IndexConsumerFunc&& indexConsumer) {
@@ -147,7 +247,6 @@ void col_elements_foreach(const size_t i, IndexConsumerFunc&& indexConsumer) {
     }
     return;
 }
-
 
 template <class IndexConsumerFunc>
 void square3x3_elements_foreach(const size_t i, IndexConsumerFunc&& indexConsumer) {
@@ -163,7 +262,6 @@ void square3x3_elements_foreach(const size_t i, IndexConsumerFunc&& indexConsume
     return;
 }
 
-
 static void test() {
 #ifndef NDEBUG
     test_row_elements_foreach();
@@ -174,7 +272,6 @@ static void test() {
 #endif
     return;
 }
-
 
 static void test_row_elements_foreach() {
     const auto collect = [](const size_t target_index) {
@@ -203,7 +300,6 @@ static void test_row_elements_foreach() {
     return;
 }
 
-
 static void test_col_elements_foreach() {
     const auto collect = [](const size_t target_index) {
         std::vector<size_t> indexes;
@@ -230,7 +326,6 @@ static void test_col_elements_foreach() {
     std::clog << "[test_col_elements_foreach()] all tests passed!" << std::endl;
     return;
 }
-
 
 static void test_square3x3_elements_foreach() {
     const auto collect = [](const size_t target_index) {
