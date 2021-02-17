@@ -1,0 +1,6 @@
+BasedOnStyle: Google
+Language: Cpp
+IndentWidth: 4
+AccessModifierOffset: -2
+AllowShortIfStatementsOnASingleLine: true
+ColumnLimit:     120
