@@ -163,13 +163,65 @@ int main() {
     return 0;
 }
 
-// is から空白区切りで盤面を受け取って、各空欄マスについて候補値の集合が計算された状態の board を返す。
+/* is から盤面を受け取って、各空欄マスについて候補値の集合が計算された状態の board を返す。
+ * 空欄マスは '1'から'9' 以外の文字なら何でもOK
+ *
+ * valid:
+ *    ...4.....
+ *    ..5126734
+ *    46...3...
+ *    ..4..1.68
+ *    .1.678..2
+ *    ..62.5..7
+ *    6528..4..
+ *    9...6..5.
+ *    17835.9..
+ *
+ * also valid:
+ *    000400000
+ *    005126734
+ *    460003000
+ *    004001068
+ *    010678002
+ *    006205007
+ *    652800400
+ *    900060050
+ *    178350900
+ *
+ * also valid:
+ *    ???4?????
+ *    ??5126734
+ *    46???3???
+ *    ??4??1?68
+ *    ?1?678??2
+ *    ??62?5??7
+ *    6528??4??
+ *    9???6??5?
+ *    17835?9??
+ */
 static Board read_board(std::istream& is) {
+    constexpr const char* whitespaces = " \n\t\r";
     Board b;
 
     for (size_t y = 0; y < N; ++y) {
+        std::string line;
+        std::getline(is, line);
+
+        line.erase(line.find_last_not_of(whitespaces) + 1);  // trim right
+        line.erase(0, line.find_first_not_of(whitespaces));  // trim left
+
+        std::clog << line << std::endl;
+
+        if (line.empty()) continue;
+
+        assert(line.length() == N);
+
         for (size_t x = 0; x < N; ++x) {
-            is >> b.at(y, x).value;
+            if (std::isdigit(line[x])) {
+                b.at(y, x).value = static_cast<Cell::value_type>(line[x] - '0');
+            } else {
+                b.at(y, x).value = BLANK;
+            }
         }
     }
 
