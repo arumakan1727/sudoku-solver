@@ -147,16 +147,30 @@ static bool solve(Board& input, Board& output);
 static void print_board(const Board& b, std::ostream&);
 
 int main() {
-    std::cin.tie(nullptr);
-    std::ios_base::sync_with_stdio(false);
+    namespace chrono = std::chrono;
+    /* std::cin.tie(nullptr); */
+    /* std::ios_base::sync_with_stdio(false); */
 
     test();
 
     Board input_board = read_board(std::cin);
 
+    const auto start_time = chrono::system_clock::now();
+
     Board answer;
-    const bool solve_succeeded = solve(input_board, answer);
-    assert(solve_succeeded);
+    {
+        const bool solve_succeeded = solve(input_board, answer);
+        assert(solve_succeeded);
+    }
+
+    const auto finish_time = chrono::system_clock::now();
+
+    {
+        const double elapsed = chrono::duration_cast<chrono::microseconds>(finish_time - start_time).count();
+        std::clog << std::endl;
+        std::clog << "time: " << elapsed / 1000 << "ms" << std::endl;
+        std::clog << std::endl;
+    }
 
     print_board(answer, std::cout);
 
