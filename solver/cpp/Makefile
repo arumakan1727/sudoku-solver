@@ -12,7 +12,7 @@ debug: build
 
 .PHONY:	release
 release: BUILD_DIR = build/release
-release: CXX_FLAGS += -Ofast -DNDEBUG
+release: CXX_FLAGS += -Ofast -DNDEBUG -Wno-unused-variable -Wno-unused-function -Wno-unused-const-variable
 release: build
 
 

@@ -3,3 +3,4 @@
 -Wno-unused-const-variable
 -Wno-unused-macros
 -Wno-c++98-compat-pedantic
+-Wno-implicit-int-float-conversion
