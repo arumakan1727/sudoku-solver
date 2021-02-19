@@ -231,7 +231,7 @@ static Board read_board(std::istream& is) {
         assert(line.length() == N);
 
         for (size_t x = 0; x < N; ++x) {
-            if (std::isdigit(line[x])) {
+            if ('1' <= line[x] && line[x] <= '9') {
                 b.at(y, x).value = static_cast<Cell::value_type>(line[x] - '0');
             } else {
                 b.at(y, x).value = BLANK;
